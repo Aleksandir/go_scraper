@@ -1,15 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chromedp/chromedp"
 )
 
 type Product struct {
@@ -19,7 +21,7 @@ type Product struct {
 }
 
 func getSearchPages(file string) []string {
-	data, err := ioutil.ReadFile(file)
+	data, err := os.ReadFile(file)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -27,11 +29,21 @@ func getSearchPages(file string) []string {
 }
 
 func getDocument(url string) *goquery.Document {
-	res, err := http.Get(url)
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+
+	var html string
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(url),
+		// Wait for the page to finish loading.
+		chromedp.Sleep(5*time.Second),
+		chromedp.OuterHTML(`document.body`, &html),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	doc, err := goquery.NewDocumentFromReader(res.Body)
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,7 +52,7 @@ func getDocument(url string) *goquery.Document {
 
 func saveData(data map[string]Product) {
 	file, _ := json.MarshalIndent(data, "", " ")
-	_ = ioutil.WriteFile("products.json", file, 0644)
+	_ = os.WriteFile("products.json", file, 0644)
 }
 
 func scrapeProductCategoryPage(url string) map[string]Product {
@@ -56,10 +68,11 @@ func scrapeProductCategoryPage(url string) map[string]Product {
 }
 
 func main() {
-	SOURCES_FILE := "src/sources.txt"
+	// SOURCES_FILE := "src/sources.txt"
 	fmt.Println("Scraping PCCaseGear...")
 
-	siteUrls := getSearchPages(SOURCES_FILE)
+	// siteUrls := getSearchPages(SOURCES_FILE)
+	siteUrls := []string{"https://www.pccasegear.com/category/416/new-products"}
 
 	allProducts := make(map[string]Product)
 	var wg sync.WaitGroup
