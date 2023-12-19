@@ -1,17 +1,14 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
+	"io/ioutil"
 	"log"
-	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/chromedp/chromedp"
+	"github.com/sclevine/agouti"
 )
 
 type Product struct {
@@ -20,74 +17,96 @@ type Product struct {
 	URL   string `json:"url"`
 }
 
-func getSearchPages(file string) []string {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return strings.Split(string(data), "\n")
-}
-
-func getDocument(url string) *goquery.Document {
-	ctx, cancel := chromedp.NewContext(context.Background())
-	defer cancel()
-
-	var html string
-	err := chromedp.Run(ctx,
-		chromedp.Navigate(url),
-		// Wait for the page to finish loading.
-		chromedp.Sleep(5*time.Second),
-		chromedp.OuterHTML(`document.body`, &html),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-	if err != nil {
-		log.Fatal(err)
-	}
-	return doc
-}
-
-func saveData(data map[string]Product) {
-	file, _ := json.MarshalIndent(data, "", " ")
-	_ = os.WriteFile("products.json", file, 0644)
-}
-
-func scrapeProductCategoryPage(url string) map[string]Product {
-	doc := getDocument(url)
-	products := make(map[string]Product)
-	doc.Find(".product-title").Each(func(i int, s *goquery.Selection) {
-		name := s.Text()
-		price := s.Find(".price-box .price").Text()
-		url, _ := s.Attr("href")
-		products[name] = Product{Name: name, Price: price, URL: url}
-	})
-	return products
-}
-
 func main() {
-	// SOURCES_FILE := "src/sources.txt"
-	fmt.Println("Scraping PCCaseGear...")
+	// Read the source file
+	data, err := ioutil.ReadFile("src/sources.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// siteUrls := getSearchPages(SOURCES_FILE)
-	siteUrls := []string{"https://www.pccasegear.com/category/416/new-products"}
+	// Split the file content into lines
+	urls := strings.Split(string(data), "\n")
 
-	allProducts := make(map[string]Product)
+	// Create a new WebDriver instance
+	driver := agouti.ChromeDriver(
+		agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}),
+	)
+	if err := driver.Start(); err != nil {
+		log.Fatal("Failed to start driver:", err)
+	}
+	defer driver.Stop()
+
+	// Create a wait group
 	var wg sync.WaitGroup
-	for _, url := range siteUrls {
+
+	// Create a channel to collect the results
+	results := make(chan Product)
+
+	// Launch a goroutine for each URL
+	for _, url := range urls {
 		wg.Add(1)
 		go func(url string) {
 			defer wg.Done()
-			products := scrapeProductCategoryPage(url)
-			for k, v := range products {
-				allProducts[k] = v
-			}
+			scrapeAndSave(url, driver, results)
 		}(url)
 	}
-	wg.Wait()
 
-	saveData(allProducts)
-	fmt.Printf("\n%d products scraped and saved in total.\n", len(allProducts))
+	// Launch a goroutine to close the results channel after all other goroutines finish
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect and save the results
+	products := make(map[string]Product)
+	for product := range results {
+		products[product.Name] = product
+	}
+	saveData(products)
+}
+
+func scrapeAndSave(url string, driver *agouti.WebDriver, results chan<- Product) {
+	// Create a new page
+	page, err := driver.NewPage()
+	if err != nil {
+		log.Fatal("Failed to open page:", err)
+	}
+
+	// Navigate to the URL
+	if err := page.Navigate(url); err != nil {
+		log.Fatal("Failed to navigate:", err)
+	}
+
+	// Get the page content
+	content, err := page.HTML()
+	if err != nil {
+		log.Fatal("Failed to get HTML:", err)
+	}
+
+	// Parse the page content with goquery
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(content))
+	if err != nil {
+		log.Fatal("Failed to parse HTML:", err)
+	}
+
+	// Scrape the product data
+	doc.Find(".product-title").Each(func(i int, s *goquery.Selection) {
+		name := s.Text()
+		price := s.Parent().Find(".price-box .price").Text()
+		url, _ := s.Attr("href")
+		results <- Product{Name: name, Price: price, URL: url}
+	})
+}
+
+func saveData(products map[string]Product) {
+	// Convert the data to JSON
+	data, err := json.MarshalIndent(products, "", "  ")
+	if err != nil {
+		log.Fatal("Failed to marshal data:", err)
+	}
+
+	// Write the data to a file
+	if err := ioutil.WriteFile("products.json", data, 0644); err != nil {
+		log.Fatal("Failed to write file:", err)
+	}
 }
