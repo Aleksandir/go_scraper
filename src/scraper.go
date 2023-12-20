@@ -2,31 +2,26 @@ package main
 
 import (
 	"encoding/csv"
+	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"sync"
 
 	"github.com/gocolly/colly"
 )
 
-// initializing a data structure to keep the scraped data
 type PokemonProduct struct {
 	url, image, name, price string
 }
 
 func main() {
-	// following https://www.zenrows.com/blog/web-scraping-golang#parallel-web-scraping
-
-	// initializing the slice of structs to store the data to scrape
 	var pokemonProducts []PokemonProduct
 
-	// creating a new Colly instance
 	c := colly.NewCollector()
 
-	// visiting the target page
-	c.Visit("https://scrapeme.live/shop/")
-
-	// scraping logic
 	c.OnHTML("li.product", func(e *colly.HTMLElement) {
+		// create a new PokemonProduct struct
 		pokemonProduct := PokemonProduct{}
 
 		pokemonProduct.url = e.ChildAttr("a", "href")
@@ -37,37 +32,49 @@ func main() {
 		pokemonProducts = append(pokemonProducts, pokemonProduct)
 	})
 
-	// opening the CSV file
-	file, err := os.Create("products.csv")
-	if err != nil {
-		log.Fatalln("Failed to create output CSV file", err)
-	}
-	defer file.Close()
+	c.OnScraped(func(r *colly.Response) {
+		file, err := os.Create("products.csv")
+		if err != nil {
+			log.Fatalln("Failed to create output CSV file", err)
+		}
+		defer file.Close()
 
-	// initializing a file writer
-	writer := csv.NewWriter(file)
+		writer := csv.NewWriter(file)
 
-	// writing the CSV headers
-	headers := []string{
-		"url",
-		"image",
-		"name",
-		"price",
-	}
-	writer.Write(headers)
+		headers := []string{
+			"url",
+			"image",
+			"name",
+			"price",
+		}
+		writer.Write(headers)
 
-	// writing each Pokemon product as a CSV row
-	for _, pokemonProduct := range pokemonProducts {
-		// converting a PokemonProduct to an array of strings
-		record := []string{
-			pokemonProduct.url,
-			pokemonProduct.image,
-			pokemonProduct.name,
-			pokemonProduct.price,
+		for _, pokemonProduct := range pokemonProducts {
+			record := []string{
+				pokemonProduct.url,
+				pokemonProduct.image,
+				pokemonProduct.name,
+				pokemonProduct.price,
+			}
+
+			writer.Write(record)
 		}
 
-		// adding a CSV record to the output file
-		writer.Write(record)
+		writer.Flush()
+	})
+
+	// Start scraping on https://scrapeme.live/shop/page/1 through to https://scrapeme.live/shop/page/48
+	// concurrently using goroutines and a WaitGroup
+	var wg sync.WaitGroup
+
+	for i := 1; i <= 48; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			c.Visit("https://scrapeme.live/shop/page/" + strconv.Itoa(i))
+			fmt.Println("Scraping page", i)
+		}(i)
 	}
-	defer writer.Flush()
+
+	wg.Wait()
 }
