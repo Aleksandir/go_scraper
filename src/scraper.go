@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/csv"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"sync"
 
+	"github.com/cheggaaa/pb"
 	"github.com/gocolly/colly"
 )
 
@@ -66,15 +66,24 @@ func main() {
 	// Start scraping on https://scrapeme.live/shop/page/1 through to https://scrapeme.live/shop/page/48
 	// concurrently using goroutines and a WaitGroup
 	var wg sync.WaitGroup
+	numPages := 48
 
-	for i := 1; i <= 48; i++ {
+	// Create a new progress bar
+	bar := pb.StartNew(numPages)
+
+	for i := 1; i <= numPages; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			c.Visit("https://scrapeme.live/shop/page/" + strconv.Itoa(i))
-			fmt.Println("Scraping page", i)
+
+			// Increment the progress bar
+			bar.Increment()
 		}(i)
 	}
 
 	wg.Wait()
+
+	// Finish the progress bar
+	bar.Finish()
 }
