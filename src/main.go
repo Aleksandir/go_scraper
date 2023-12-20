@@ -27,10 +27,8 @@ func main() {
 	// Split the file content into lines
 	urls := strings.Split(string(data), "\n")
 
-	// Create a new WebDriver instance
-	driver := agouti.ChromeDriver(
-		agouti.ChromeOptions("args", []string{"--headless", "--disable-gpu", "--no-sandbox"}),
-	)
+	// Create a new WebDriver instance for Firefox
+	driver := agouti.GeckoDriver()
 	if err := driver.Start(); err != nil {
 		log.Fatal("Failed to start driver:", err)
 	}
