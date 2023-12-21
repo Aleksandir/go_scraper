@@ -66,7 +66,19 @@ func main() {
 	// Start scraping on https://scrapeme.live/shop/page/1 through to https://scrapeme.live/shop/page/48
 	// concurrently using goroutines and a WaitGroup
 	var wg sync.WaitGroup
-	numPages := 48
+
+	// Create a new collector for getting the max number of pages
+	c1 := colly.NewCollector()
+
+	var numPages int
+
+	c1.OnHTML("ul.page-numbers li:nth-last-child(2) a", func(e *colly.HTMLElement) {
+		numPages, _ = strconv.Atoi(e.Text)
+	})
+
+	c1.Visit("https://scrapeme.live/shop/page/1")
+
+	println("Number of pages: ", numPages)
 
 	// Create a new progress bar
 	bar := pb.StartNew(numPages)
