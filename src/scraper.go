@@ -16,10 +16,13 @@ type PokemonProduct struct {
 }
 
 func main() {
+	// create a slice of PokemonProduct structs
 	var pokemonProducts []PokemonProduct
 
+	// create a new collector
 	c := colly.NewCollector()
 
+	// On every a element which has href attribute call callback
 	c.OnHTML("li.product", func(e *colly.HTMLElement) {
 		// create a new PokemonProduct struct
 		pokemonProduct := PokemonProduct{}
@@ -32,24 +35,28 @@ func main() {
 		pokemonProducts = append(pokemonProducts, pokemonProduct)
 	})
 
+	//when c finishes scraping, call the function to write the products to a CSV file
 	c.OnScraped(func(r *colly.Response) {
 		writeProductsToCSV(pokemonProducts)
 	})
 
-	// Start scraping on https://scrapeme.live/shop/page/1 through to https://scrapeme.live/shop/page/48
 	// concurrently using goroutines and a WaitGroup
 	var wg sync.WaitGroup
 
+	// get the number of pages
 	numPages := getNumPages("https://scrapeme.live/shop/page/1")
 
+	// Print the number of pages
 	println("Number of pages: ", numPages)
 
 	// Create a new progress bar
 	bar := pb.StartNew(numPages)
 
+	// Visit each page
 	for i := 1; i <= numPages; i++ {
 		wg.Add(1)
 		go func(i int) {
+			// Decrement the WaitGroup counter when the goroutine completes
 			defer wg.Done()
 			c.Visit("https://scrapeme.live/shop/page/" + strconv.Itoa(i))
 
@@ -58,12 +65,17 @@ func main() {
 		}(i)
 	}
 
+	// Wait for all HTTP requests to finish
 	wg.Wait()
 
 	// Finish the progress bar
 	bar.Finish()
 }
 
+// getNumPages is a function that retrieves the maximum number of pages from a given URL.
+// It uses the colly library to scrape the HTML and extract the number of pages.
+// The URL parameter specifies the URL to scrape.
+// The function returns the maximum number of pages as an integer.
 func getNumPages(url string) int {
 	// Create a new collector for getting the max number of pages
 	c1 := colly.NewCollector()
@@ -79,6 +91,10 @@ func getNumPages(url string) int {
 	return numPages
 }
 
+// writeProductsToCSV writes the given Pokemon products to a CSV file.
+// It takes a slice of PokemonProduct structs as input and creates a CSV file named "products.csv".
+// The function writes the headers and then iterates over each PokemonProduct to write its URL, image, name, and price to the CSV file.
+// Finally, it flushes the writer to ensure all data is written to the file.
 func writeProductsToCSV(pokemonProducts []PokemonProduct) {
 	file, err := os.Create("products.csv")
 	if err != nil {
