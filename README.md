@@ -1,22 +1,17 @@
-# My Go Program
+# Go Web Scraper
 
-This is a simple Go program.
+This project is a Go program developed to learn and understand the process of web scraping. It scrapes data from https://scrapeme.live/shop and adds it to a scv file.
+
+The main logic of the scraper can be found in [`src/scraper.go`](src/scraper.go).
 
 ## Installation
 
-To install this program, you need to have Go installed on your machine. Once Go is installed, you can clone this repository and navigate to the project directory.
+Ensure Go is installed on your machine. Clone this repository and navigate to the project directory.
+
+## Packages Used
+
+The `colly` package is used in this project for web scraping. Install it by running the following command in your terminal:
 
 ```bash
-git clone https://github.com/username/my-go-program.git
-cd my-go-program
+go get -u github.com/gocolly/colly/...
 ```
-
-## Usage
-
-To run the program, use the `go run` command followed by the path to the `main.go` file.
-
-```bash
-go run src/main.go
-```
-
-Please replace `username` with your actual GitHub username in the clone URL.
